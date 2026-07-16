@@ -1,0 +1,51 @@
+Voici un plan séquentiel, pensé pour être exécuté dans l'ordre — chaque étape dépend de la précédente.
+
+## Étape 1 — Corriger/valider le pipeline sur le cas jouet actuel
+- Ajouter l'assertion de positivité de f_ξ sur une grille fine (pas seulement aux nœuds de quadrature).
+- Vérifier que les ξ* obtenus pour différents préfixes à un même niveau sont quasi identiques (cohérence avec la séparabilité de ton exemple actuel — cf. notre discussion précédente).
+- Fixer `markov_order=0` pour ce cas et vérifier que le résultat ne change pas, mais que le temps chute drastiquement.
+
+*Sortie attendue : un pipeline dont tu es sûr qu'il calcule ce qu'il est censé calculer, avant de le lancer sur des cas plus complexes.*
+
+## Étape 2 — Brancher les cas scalaires du papier (III-A, III-B, III-E, III-F)
+- Pour chacun : coder `J_func`/`c_func`, lancer `compute_lambda_star`, comparer λ* à la valeur publiée dans le papier (Fig. 2, 3, 6, 7).
+- Un script séparé par cas (ou un seul script paramétré), pas besoin de repartir de zéro à chaque fois — seule la paire (J_func, c_func) change.
+
+*Sortie attendue : un tableau λ*_toi vs λ*_papier, avec écart chiffré. Ça valide `compute_lambda_star` et `_fit_polynomial` indépendamment du reste.*
+
+## Étape 3 — Cas pont : détection d'énergie (III-C)
+- Implémenter J(θ) comme intégrale numérique (quadrature sur y, avec les fonctions de Bessel I₀/I₁).
+- Vérifier que ça s'intègre proprement dans `log_g` sans changer le reste du pipeline.
+
+*Sortie attendue : preuve que ton pipeline supporte un J_func qui n'est pas fermé — utile pour le vrai channel MIMO du stage plus tard.*
+
+## Étape 4 — Cas multidimensionnel couplé : CSI imparfait (III-D)
+- Implémenter J(θ) avec le terme couplé θθᵀ (cas isotrope Γ ∝ I d'abord, le plus simple).
+- Comparer la marginale radiale empirique de ta constellation à p(r) donné en forme fermée par le papier.
+- C'est le test le plus important : il exerce réellement le cache par contexte et l'ajustement conditionnel, contrairement au cas jouet séparable.
+
+*Sortie attendue : comparaison chiffrée (KS-test ou distance L1/L2) entre p(r) empirique et théorique, pour au moins 2-3 valeurs de σ² (variance de l'erreur d'estimation CSI).*
+
+## Étape 5 — Benchmark de complexité
+- Mesurer le temps d'exécution de `build()` en fonction de d (M fixé) et de M (d fixé), sur le cas III-D.
+- Refaire la mesure avec `markov_order` fixé à différentes valeurs et comparer.
+- Tracer en log-log pour vérifier la croissance Θ(M^d) (ou O(d·M^D) avec markov_order).
+
+*Sortie attendue : graphique + tableau temps vs (d, M), qui documente empiriquement la limite de Approach I mentionnée dans le Remark 3 du papier.*
+
+## Étape 6 — Information mutuelle via Blahut-Arimoto
+- Implémenter (ou réutiliser une implémentation existante de) Blahut-Arimoto pour calculer l'IM à partir d'une constellation discrète et de la loi p(y|x) du canal.
+- Calculer l'IM pour ta constellation Approach I sur le cas III-D (ou un cas ADC/clipping plus simple si le calcul est trop lourd en dimension), et comparer à une constellation PAM de même taille.
+- Si possible, comparer à la capacité asymptotique théorique C(P) de l'éq. (6).
+
+*Sortie attendue : graphique IM vs taille de constellation, dans l'esprit de la Fig. 8 du papier.*
+
+## Étape 7 — Rédaction du notebook de livrable
+- Rassembler les résultats des étapes 2 à 6 dans un notebook structuré : un cas scalaire de validation, le cas III-D en multidimensionnel, benchmark de complexité, courbe IM.
+- Conclusion courte : limites observées de Approach I (temps, dimension max atteignable), qui justifie noir sur blanc le passage à Approach II.
+
+*Sortie attendue : le livrable final de cette partie, prêt à montrer à ton encadrant ou à réutiliser comme point de comparaison pour Approach II.*
+
+---
+
+Si tu veux, je peux t'aider à écrire le code de l'étape 4 (cas III-D) ou de l'étape 6 (Blahut-Arimoto) en premier — dis-moi par laquelle tu veux commencer.

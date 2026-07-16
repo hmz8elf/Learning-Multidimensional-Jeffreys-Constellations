@@ -1,0 +1,88 @@
+Ton script implémente exactement ce que la Section IV du papier décrit sous le nom d'« approximate polynomial Jeffreys constellation » (éq. 13, ajustement par barrière logarithmique de la Section IV-B), étendu au cas multidimensionnel via la règle en chaîne du Remark 3 / Section IV-C. C'est utile à savoir : tu n'es pas en train d'inventer une méthode à côté du papier, tu codes précisément sa Section IV.
+
+## Cas d'usage à exécuter (par ordre de priorité)
+
+**1. Cas scalaires (d=1) — validation contre des résultats fermés du papier**
+
+Le papier donne, pour quatre channels scalaires, soit une expression fermée de J(θ), soit une expression semi-fermée facilement intégrable numériquement, ainsi que des figures avec les valeurs de λ* :
+
+- **AWGN avec clipping** (III-A, Fig. 2) : J(θ) fermé (eq. après (9)), λ* donné pour plusieurs ratios de clipping α. Cas le plus simple à brancher dans `J_func`/`c_func`.
+- **AWGN avec ADC L niveaux** (III-B, Fig. 3) : J(θ) en somme finie de termes fermés. λ* donné pour L=2,4,8,16.
+- **Poisson SIMO** (III-E, Fig. 6) : J(θ) = E[h²/(hθ+μ)], fermé sans fading. λ* donné pour plusieurs α = μ/A.
+- **1-bit ADC avec dithering** (III-F, Fig. 7) : J(θ) = espérance sur un ensemble discret de décalages s, calcul direct. λ* donné pour plusieurs N et A.
+
+Pour chacun, le papier te donne le λ* de référence — c'est un test de non-régression immédiat pour `compute_lambda_star`, indépendant de la qualité de l'ajustement polynomial. Ensuite tu compares la constellation obtenue à la courbe wJ,λ* tracée dans les figures.
+
+**2. Cas scalaire avec intégrale non fermée — test de robustesse numérique**
+
+**Complex AWGN à détection d'énergie** (III-C, Fig. 4) : J(θ) est une espérance sur y (loi χ² non centrale, fonctions de Bessel I₀/I₁), qui doit être évaluée par quadrature — comme ton `_log_marginal` le fait déjà pour les dimensions restantes, mais ici c'est l'intégrale *interne* à J(θ) elle-même qui n'est pas fermée. Bon test pour vérifier que ton pipeline supporte un `J_func` qui n'est pas donné analytiquement mais doit être quadraturé à chaque appel — ça se rapprochera de ce que tu rencontreras en pratique dans le vrai channel MIMO du stage.
+
+**3. Cas vraiment multidimensionnel — celui qui compte pour le stage**
+
+**MIMO avec CSI imparfait** (III-D, Fig. 5) : c'est le seul exemple du papier avec un Fisher information matriciel *couplé* (le terme θθᵀ dans J(θ), pas diagonal comme ton exemple jouet actuel). Avec l'hypothèse isotrope (Γ ∝ I), le papier réduit lui-même le problème à une distribution radiale 1D p(r) — ce qui te donne une référence fermée en dimension d=2nt pour valider ton arbre de conditionnelles construit dimension par dimension, sur un cas où les coordonnées ne sont *pas* indépendantes (contrairement à ton diag(1+θᵢ²) actuel, qui masque justement le vrai défi de l'approche successive).
+
+C'est le cas le plus important à exécuter : ton exemple jouet actuel est séparable donc n'exerce pas vraiment l'algorithme (chaque conditionnelle est identique quel que soit le préfixe, cf. mon commentaire précédent). Le cas III-D couple les coordonnées via θθᵀ — c'est là que tu verras si `_fit_polynomial` et le cache par contexte fonctionnent correctement quand le contexte compte réellement.
+
+## Mon avis sur les cas du papier
+
+- Les quatre cas scalaires (clipping, ADC, Poisson, dithering) sont surtout utiles comme **tests unitaires** — rapides, avec référence numérique publiée, mais peu représentatifs de la difficulté du stage (d=1, pas de conditionnement).
+- Le cas énergie détectée (III-C) est le bon **pont** : toujours scalaire, mais introduit le besoin de quadrature interne — utile avant de passer en dimension > 1.
+- Le cas CSI imparfait (III-D) est le **seul test multidimensionnel non trivial** du papier, et il a une structure isotrope qui te donne encore une référence fermée (p(r)) malgré le couplage — rare compromis entre difficulté réelle et vérifiabilité. Je le mettrais en tête de liste pour valider Approach I avant de passer à Approach II.
+- Note que le papier ne fournit **aucun exemple générique en d > 2 sans structure de symétrie** (isotropie, séparabilité) — ce qui confirme que le vrai défi combinatoire (Θ(M^d), section Remark 3) est justement ce que ton stage doit explorer au-delà de ce que Yang & Combes ont traité numériquement.
+
+Bonne question à se poser maintenant que tu as le code qui tourne et une liste de cas d'usage à exécuter. Voici ce qui constitue concrètement les livrables de la partie Approach I (baseline), en partant de ce que demande le sujet et de ce qui est utile pour la suite du stage.
+
+## Ce que le sujet demande explicitement (section Evaluation and Deliverables)
+
+Le sujet liste trois catégories de livrables, valables pour **toute** approche (I et II) :
+
+1. **Métriques distributionnelles** : à quel point ta constellation approxime bien wJ,λ*.
+2. **Complexité computationnelle et scalabilité en d**.
+3. **Performance en aval** : information mutuelle / capacity gap en fonction de la taille de constellation.
+
+Plus un livrable global : un rapport court (notebook Python) résumant résultats et compromis.
+
+Pour Approach I spécifiquement, ces trois catégories se traduisent comme ceci :
+
+## 1. Validation de la fidélité de l'approximation
+
+Pour chaque cas d'usage qu'on a listé (clipping, ADC, Poisson, dithering, CSI imparfait) :
+- comparer ta constellation (histogramme empirique par coordonnée, ou marginale radiale pour le cas III-D) à la densité théorique wJ,λ* donnée dans le papier ;
+- une métrique numérique de distance (KS-test, MMD, ou simplement erreur sur λ* et sur E[c(θ)]) — pas juste un graphique visuel, un chiffre reproductible.
+
+**Livrable concret** : un tableau ou graphique par cas, avec la distance mesurée, à côté des figures du papier (Fig. 2, 3, 4, 5, 6, 7) que tu reproduis avec ta méthode.
+
+## 2. Caractérisation de la complexité
+
+Le sujet insiste sur ça car c'est la limite connue de Approach I (Remark 3 du papier : Θ(M^d) sans structure markovienne).
+
+**Livrable concret** :
+- temps d'exécution mesuré en fonction de d (à M fixé) et de M (à d fixé) ;
+- une comparaison avec/sans `markov_order` fixé (tu as déjà ce paramètre dans ton `BaselineConfig`) ;
+- un graphique log-log du temps vs M^d, pour vérifier empiriquement que ça suit bien la loi théorique.
+
+C'est ce qui justifiera noir sur blanc, dans ton rapport, pourquoi Approach II (apprentissage) est nécessaire — Approach I sert de repoussoir chiffré, pas juste d'affirmation qualitative.
+
+## 3. Performance en information mutuelle
+
+Pour chaque constellation générée, calculer l'information mutuelle via Blahut-Arimoto (mentionné dans tes mémoires comme deliverable clé), et comparer à :
+- une constellation PAM standard (référence classique, comme Fig. 8 du papier) ;
+- si possible, la capacité asymptotique théorique C(P) de l'éq. (6) du papier, pour voir l'écart.
+
+**Livrable concret** : reproduire un graphique dans l'esprit de la Fig. 8 du papier (IM vs taille de constellation, ou vs nr), mais avec ta propre constellation Approach I au lieu de celle du papier.
+
+## Le livrable final de cette partie
+
+Un notebook qui rassemble les trois éléments ci-dessus pour au moins 2-3 cas d'usage (je recommande : un cas scalaire simple type clipping ou ADC comme sanity check rapide, plus le cas CSI imparfait III-D comme test multidimensionnel sérieux), avec pour chacun :
+
+| Élément | Ce qu'il faut montrer |
+|---|---|
+| Fidélité | distance constellation vs wJ,λ* de référence |
+| Complexité | temps mesuré vs (d, M), courbe log-log |
+| IM | courbe IM vs taille, comparée à PAM et à C(P) théorique |
+
+Ce notebook devient ta ligne de base chiffrée : quand tu passeras à Approach II (normalizing flows, SVGD, etc.), tu pourras dire précisément « pour d = X, Approach I prenait Y secondes et donnait une IM de Z, voici ce que Approach II apporte ». Sans cette baseline documentée, la comparaison n'a pas de sens.
+
+Si tu veux, je peux t'aider à écrire le squelette du notebook (structure des sections, fonctions de mesure de temps et de distance) pour que tu n'aies plus qu'à brancher tes `J_func`/`c_func` par cas.
+
+
