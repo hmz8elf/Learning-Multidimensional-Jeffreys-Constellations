@@ -1,0 +1,20 @@
+- methodology_note.md
+- oracle.py + validate_oracle.py (PASS)
+- flow.py + validate_invertibility.py (PASS)
+- train.py + checkpoints/flow_1d.pt, flow_2d.pt
+- diagnostics.py
+- validate_flow_1d.py, validate_flow_2d.py + résultats (ESS, plots)
+- debug_log.md
+- notebooks/week3_results.ipynb
+- svgd.py, score_based.py (stubs prêts pour S5/S6)
+
+## Semaine 4
+- oracle_nongaussian.py + validate_nongaussian.py (ESS/N = 0.9228)
+- oracle_mimo.py + validate_mimo_nt2.py, validate_mimo_nt4.py, validate_mimo_nt8.py (ESS/N respectifs: ~0.99, ~0.98, ~0.98)
+- benchmark_ess_vs_dim.py + .png
+- jeffreys_flow/ (mini-framework consolidé avec Oracle, Sampler et RealNVPFlowSampler)
+- evaluate_downstream.py (Validation Blahut-Arimoto sur nt=2)
+- checkpoints n_t=2,4,8 générés et sauvegardés
+- methodology_note.md mis à jour
+- debug_log.md mis à jour avec section Décision J24
+- notebooks/week4_results.ipynb (Orchestration des checkpoints et résultats)

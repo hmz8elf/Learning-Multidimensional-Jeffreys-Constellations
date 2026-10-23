@@ -1,1 +1,23 @@
-__pycache__/*
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temporary / incremental outputs
+*.tmp
+*_incremental.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Heavy or ad-hoc outputs (trained checkpoints and MCMC references are committed on purpose)
+*.npz
+*.npy
+*.ckpt
+runs/
+wandb/

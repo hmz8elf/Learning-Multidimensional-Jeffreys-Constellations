@@ -1,0 +1,306 @@
+PLAN D'IMPLEMENTATION COMPLET — SEMAINE 4 (J18-J24)
+Projet : Learning Multidimensional Jeffreys Constellations
+Bloc 2 — Passage à l'échelle et généralisation (suite directe de la Semaine 3)
+Répertoire de travail : ~/Documents/EMI-CS/Stage/CNRST/Approche 2/
+Stack : Python 3.9 (aligné sur l'environnement déjà utilisé Semaine 3), PyTorch,
+numpy, scipy, matplotlib, pytest
+
+Ce document est destiné à un agent de codage autonome (Antigravity). Il doit
+TOUT exécuter : lire l'état existant du dossier, écrire le code, écrire les
+tests, lancer les entraînements, produire les résultats et les livrables.
+Ne rien laisser en attente de validation humaine sauf mention explicite
+"CHECKPOINT HUMAIN" ci-dessous.
+
+===============================================================
+PREREQUIS — LIRE AVANT DE COMMENCER
+===============================================================
+Le dossier "Approche 2/" contient déjà, produit en Semaine 3 :
+  oracle.py, flow.py, train.py, diagnostics.py, config.py,
+  checkpoints/flow_1d.pt, flow_2d.pt, debug_log.md, methodology_note.md,
+  validate_oracle.py, validate_invertibility.py, validate_flow_1d.py,
+  validate_flow_2d.py, svgd.py (stub), score_based.py (stub)
+
+Lire en premier :
+  - debug_log.md : contient une limite connue explicite —
+    "validation effectuée uniquement sur cas gaussien (J(theta) constant).
+    Le pipeline reste à éprouver sur une distribution non gaussienne avant
+    la généralisation au cas MIMO CSI imparfait."
+    Cette limite EST le point de départ de la Semaine 4, traiter ETAPE 1
+    en priorité absolue avant tout le reste.
+  - methodology_note.md : section "Limites et points ouverts pour Semaine 4"
+  - Approche 1/ : dérivation manuelle de J(theta) pour le cas MIMO CSI
+    imparfait (Section III-D), normalement disponible dans les notes de
+    J8 (Bloc 1) — si un fichier texte/markdown de cette dérivation existe
+    dans "files/source/" ou ailleurs dans le repo, le lire avant d'écrire
+    oracle_mimo.py. Ne PAS re-dériver from scratch sans avoir cherché
+    d'abord si la dérivation existe déjà quelque part dans le repo.
+
+NE PAS modifier oracle.py, flow.py, train.py, diagnostics.py de façon
+destructive : les cas 1D/2D gaussiens de la Semaine 3 doivent continuer à
+fonctionner (non-régression). Ajouter, ne pas remplacer.
+
+===============================================================
+ETAPE 0 — MISE A JOUR DE LA STRUCTURE
+===============================================================
+Ajouter dans "Approche 2/" :
+
+Approche 2/
+├── ... (fichiers Semaine 3 existants, inchangés)
+├── oracle_nongaussian.py        (ETAPE 1)
+├── oracle_mimo.py                (ETAPE 2, cas III-D, n_t variable)
+├── flow_nsf.py                   (ETAPE 6, Neural Spline Flow, si nécessaire)
+├── jeffreys_flow/                (ETAPE 7 — mini-framework consolidé)
+│   ├── __init__.py
+│   ├── oracle_interface.py       (classe abstraite Oracle)
+│   ├── sampler_interface.py      (classe abstraite Sampler)
+│   ├── flows.py                  (RealNVP + NSF derrière l'interface commune)
+│   └── diagnostics.py            (réexport/consolidation de diagnostics.py)
+├── validate_nongaussian.py       (ETAPE 1)
+├── validate_mimo_nt2.py          (ETAPE 3)
+├── validate_mimo_nt4.py          (ETAPE 4)
+├── validate_mimo_nt8.py          (ETAPE 5)
+├── benchmark_ess_vs_dim.py       (ETAPE 5, mesure ESS en fonction de n_t)
+├── benchmark_ess_vs_dim.png
+├── checkpoints/
+│   ├── flow_mimo_nt2.pt / history_mimo_nt2.json
+│   ├── flow_mimo_nt4.pt / history_mimo_nt4.json
+│   └── flow_mimo_nt8.pt / history_mimo_nt8.json
+├── notebooks/
+│   └── week4_results.ipynb
+└── debug_log.md                  (complété, pas remplacé — ajouter une
+                                     section "## Semaine 4" à la suite)
+
+===============================================================
+ETAPE 1 — STRESS-TEST NON GAUSSIEN (PRIORITE ABSOLUE, J18)
+===============================================================
+But : vérifier que le pipeline flow/train/diagnostics fonctionne sur une
+cible non gaussienne AVANT de complexifier avec la vraie physique MIMO.
+
+oracle_nongaussian.py :
+  - Cas jouet 1D : J(theta) = 1 + theta**2 (non constant, mais dérivable
+    et intégrable numériquement facilement)
+  - c(theta) = theta**2 (inchangé)
+  - log_w_J_nongaussian_1d(theta, lambda_star) = 0.5*log(J(theta)) -
+    lambda_star * c(theta)
+  - theoretical_pdf_nongaussian_1d(theta, lambda_star) : normalisation
+    numérique via scipy.integrate.quad (la distribution n'a plus de forme
+    fermée simple, contrairement au cas gaussien)
+
+validate_nongaussian.py :
+  - Entraîner un RealNVPFlow (réutiliser train.py tel quel, juste changer
+    l'oracle passé en argument -> preuve directe de la généricité de
+    l'interface) sur ce cas, tag="1d_nongaussian"
+  - Calculer ESS/N, comparer visuellement à theoretical_pdf_nongaussian_1d
+  - Print PASS/FAIL avec le chiffre d'ESS
+  - Consigner le résultat dans debug_log.md, section "## Semaine 4",
+    sous-section "ETAPE 1 : Stress-test non gaussien"
+
+CHECKPOINT ATTENDU : l'ESS/N sera probablement notablement plus bas
+qu'en Semaine 3 (0.998) — c'est NORMAL et ATTENDU, pas un échec. Si
+ESS/N reste > 0.5, le pipeline de base est jugé robuste, continuer.
+Si ESS/N s'effondre (< 0.1), documenter précisément le comportement
+(loss, plot) avant de continuer vers le cas MIMO — cela indiquerait un
+problème dans train.py ou flow.py à corriger avant de complexifier
+davantage.
+
+===============================================================
+ETAPE 2 — ORACLE MIMO CSI IMPARFAIT (Section III-D), J19
+===============================================================
+oracle_mimo.py :
+  - Implémenter fisher_information_mimo(theta, H_hat, sigma2, csi_error_stats,
+    n_t) -> J(theta) [matrice n_t x n_t], en repartant de la dérivation
+    manuelle du Bloc 1 (J8) si trouvée dans le repo, sinon redériver :
+      y = H*theta + n, H = H_hat + E (erreur CSI E aléatoire)
+      si CSI parfaitement connu : J(theta) = H_hat^T H_hat / sigma2 (constant)
+      si erreur CSI incluse dans le bruit effectif : J(theta) dépend de
+      theta car E*theta contribue au bruit effectif — c'est la forme non
+      triviale à implémenter ici
+  - cost_fn_mimo(theta) = ||theta||^2 (contrainte de puissance)
+  - log_w_J_mimo(theta, lambda_star, H_hat, sigma2, csi_error_stats) ->
+    0.5*logdet(J(theta)) - lambda_star*cost_fn_mimo(theta)
+    ATTENTION : logdet doit être stable numériquement (torch.linalg.slogdet,
+    pas log(det(...)) direct qui overflow/underflow en dimension croissante)
+  - Paramétrer explicitement n_t (dimension) pour réutilisation directe
+    en n_t=2,4,8
+  - PAS de forme théorique fermée disponible en dimension > 2 -> la
+    validation ne pourra plus se faire par comparaison directe à une
+    densité théorique connue, seulement par ESS et par évaluation
+    downstream (Blahut-Arimoto, ETAPE 8)
+
+Si aucune dérivation n_t=2,4,8 générale n'est trouvable/dérivable
+proprement dans le temps imparti, IMPLEMENTER D'ABORD le cas où seul le
+bruit est aléatoire (J(theta) = H_hat^T H_hat / sigma2, constant) comme
+fallback fonctionnel, et documenter clairement dans debug_log.md que la
+version complète (erreur CSI dépendante de theta) reste à compléter.
+Ne pas bloquer toute la semaine sur cette dérivation.
+
+===============================================================
+ETAPE 3 — ENTRAINEMENT ET DEBUG n_t=2 (J20)
+===============================================================
+  - Entraîner RealNVPFlow sur oracle_mimo avec n_t=2 (dim=2), tag="mimo_nt2"
+  - Réutiliser train.py sans le modifier (preuve de généricité)
+  - Diagnostics attendus à surveiller activement (contrairement à S3 où
+    rien n'est apparu) :
+      * NaN dans logdet -> vérifier stabilité de fisher_information_mimo
+      * ESS qui s'effondre -> signe de mode collapse ou mauvaise échelle
+        des theta en entrée (normaliser theta si les valeurs sont trop
+        grandes/petites avant d'entrer dans le flow)
+      * loss qui stagne immédiatement -> vérifier que log_w_J_mimo ne
+        retourne pas une constante par erreur (bug de broadcasting fréquent
+        en passant de dim=1 à dim=2)
+  - Fixes à essayer dans l'ordre si instabilité, documenter chaque essai
+    dans debug_log.md (problème -> fix testé -> résultat) :
+      1. normalisation des entrées (rescale theta dans [-1,1] ou standardisation)
+      2. gradient clipping (déjà actif par défaut depuis S3, vérifier valeur)
+      3. réduire learning rate
+      4. augmenter n_coupling_layers / hidden_dim
+  - validate_mimo_nt2.py : ESS/N + plot 2D scatter (comme validate_flow_2d.py)
+
+===============================================================
+ETAPE 4 — EXTENSION n_t=4 (J21)
+===============================================================
+  - Même procédure, tag="mimo_nt4", dim=4
+  - validate_mimo_nt4.py : ESS/N (plus de scatter 2D possible au-delà de
+    dim 2 -> utiliser une projection 2D des dimensions principales, ou
+    simplement reporter les histogrammes marginaux par coordonnée)
+  - Noter le temps d'entraînement et l'évolution de l'ESS/N par rapport
+    à n_t=2 dans debug_log.md
+
+===============================================================
+ETAPE 5 — EXTENSION n_t=8 + BENCHMARK ESS vs DIMENSION (J22)
+===============================================================
+  - Même procédure, tag="mimo_nt8", dim=8
+  - validate_mimo_nt8.py
+  - benchmark_ess_vs_dim.py : script qui rassemble les ESS/N obtenus pour
+    n_t = 2, 4, 8 (et 1D/2D non-gaussien si pertinent) et trace un graphe
+    ESS/N vs dimension (benchmark_ess_vs_dim.png) — c'est la mesure
+    empirique attendue par le planning pour documenter la dégradation
+    avec la dimension (à mettre en regard de la complexité Θ(M^d) déjà
+    mesurée en Bloc 1 pour la baseline, comme point de comparaison dans
+    le rapport final)
+
+DECISION D'ARCHITECTURE (à documenter dans debug_log.md) :
+  Si à n_t=8 l'ESS/N chute sous un seuil jugé inacceptable (ex < 0.1) ET
+  que les fixes de l'ETAPE 3 ont déjà été essayés sans succès suffisant,
+  passer à l'ETAPE 6 (Neural Spline Flow). Sinon, ETAPE 6 optionnelle,
+  documenter le choix de rester sur RealNVP avec justification chiffrée.
+
+===============================================================
+ETAPE 6 — NEURAL SPLINE FLOW (CONDITIONNEL, J22-J23)
+===============================================================
+Uniquement si déclenché par la décision de l'ETAPE 5.
+  flow_nsf.py :
+    - Implémenter une variante de coupling layer avec transformation par
+      spline rationnelle-quadratique au lieu d'affine (plus expressive)
+    - Garder EXACTEMENT la même interface externe que RealNVPFlow
+      (sample(n), log_prob(theta)) pour compatibilité avec train.py
+  - Réentraîner sur n_t=8 avec ce flow, comparer ESS/N à RealNVP
+  - Documenter le choix final (RealNVP vs NSF) avec les deux chiffres
+    d'ESS côte à côte dans debug_log.md et methodology_note.md
+
+===============================================================
+ETAPE 7 — CONSOLIDATION EN MINI-FRAMEWORK (J23, LIVRABLE CENTRAL)
+===============================================================
+Créer le package jeffreys_flow/ :
+  - oracle_interface.py : classe abstraite Oracle avec méthode
+    log_w_J(theta) -> Tensor, et propriété dim. oracle.py, oracle_nongaussian.py,
+    oracle_mimo.py doivent chacun exposer une classe qui implémente cette
+    interface (wrapper léger autour des fonctions existantes, ne pas
+    dupliquer la logique de calcul)
+  - sampler_interface.py : classe abstraite Sampler avec méthode
+    sample(n) -> Tensor[n, dim], et log_prob(theta) -> Tensor optionnelle
+    (certains samplers futurs comme SVGD n'auront pas de log_prob)
+  - flows.py : RealNVPFlow (et NSFFlow si ETAPE 6 faite) réexposés
+    derrière sampler_interface.py
+  - Mettre à jour svgd.py et score_based.py (stubs) pour que leurs
+    signatures utilisent explicitement Oracle et Sampler de
+    jeffreys_flow/ -> preuve que l'interface est prête pour S5/S6
+  - Vérifier par un script simple que train.py peut s'exécuter de façon
+    identique en passant soit l'ancien oracle.py soit un Oracle du nouveau
+    package (non-régression garantie)
+
+===============================================================
+ETAPE 8 — EVALUATION DOWNSTREAM QUALITATIVE (J23-J24)
+===============================================================
+  - Si le module Blahut-Arimoto de Approche 1/ (blahut_arimoto.py) est
+    réutilisable : appliquer sur les échantillons générés par le flow
+    n_t=2 (cas le plus simple à interpréter), calculer l'information
+    mutuelle atteignable, comparer qualitativement à la baseline 1D/CDF
+    inverse de la Semaine "Bloc 1" (J9-J10)
+  - Ce n'est PAS l'évaluation systématique complète (prévue en S5/S6),
+    juste une première comparaison qualitative pour valider que le
+    pipeline produit des échantillons exploitables en pratique, pas
+    seulement corrects au sens ESS
+
+===============================================================
+ETAPE 9 — methodology_note.md ET notebooks/week4_results.ipynb (J24)
+===============================================================
+methodology_note.md : ajouter une section "Semaine 4 — Passage à
+l'échelle" avec :
+  1. Résultat du stress-test non gaussien (ETAPE 1)
+  2. Dérivation de l'oracle MIMO CSI imparfait utilisée (ETAPE 2)
+  3. Résultats ESS/N pour n_t = 2, 4, 8 + graphe benchmark_ess_vs_dim.png
+  4. Choix d'architecture final (RealNVP vs NSF) et justification
+  5. Premier résultat downstream qualitatif (ETAPE 8)
+  6. Décision Jalon J24 (voir ETAPE 10)
+
+notebooks/week4_results.ipynb : orchestration uniquement (charger les
+checkpoints, tracer les graphes déjà générés, afficher le tableau
+récapitulatif ESS/N par dimension), pas de logique métier dedans.
+
+===============================================================
+ETAPE 10 — DECISION JALON J24 (CHECKPOINT HUMAIN)
+===============================================================
+Le planning prévoit explicitement une décision à J24 : "si le pipeline
+n'est pas stabilisé, préférer livrer une seule méthode (Flows) très bien
+évaluée plutôt que de forcer SVGD et/ou score-based en parallèle sans
+base solide."
+
+L'agent doit préparer les éléments de décision (ESS/N final à n_t=8,
+stabilité de l'entraînement, temps passé sur le debug) dans
+debug_log.md sous une section "## Décision J24", mais la décision
+elle-même (démarrer SVGD en Semaine 5 tel quel, ou consolider encore le
+flow) est un CHECKPOINT HUMAIN — ne pas commencer le code SVGD dans
+svgd.py au-delà du stub déjà existant sans validation explicite.
+
+===============================================================
+ETAPE 11 — livrables.txt
+===============================================================
+Mettre à jour (ne pas écraser la liste Semaine 3, ajouter une section
+"## Semaine 4") avec :
+  - oracle_nongaussian.py + validate_nongaussian.py (résultat ESS)
+  - oracle_mimo.py + validate_mimo_nt2/4/8.py (résultats ESS)
+  - benchmark_ess_vs_dim.py + .png
+  - flow_nsf.py (si fait) + comparaison RealNVP vs NSF
+  - jeffreys_flow/ (mini-framework consolidé)
+  - checkpoints n_t=2,4,8
+  - methodology_note.md mis à jour
+  - notebooks/week4_results.ipynb
+  - debug_log.md mis à jour avec section Décision J24
+
+===============================================================
+CRITERES DE VALIDATION GLOBAUX (fin de semaine)
+===============================================================
+  [ ] Stress-test non gaussien fait et documenté AVANT le passage au MIMO
+  [ ] Oracle MIMO CSI imparfait implémenté pour n_t=2,4,8 (ou fallback
+      documenté si la version complète n'est pas atteignable dans le temps)
+  [ ] Un flow entraîné et validé (ESS/N chiffré) pour chaque n_t = 2,4,8
+  [ ] benchmark_ess_vs_dim.png produit
+  [ ] Non-régression : validate_flow_1d.py et validate_flow_2d.py de la
+      Semaine 3 passent toujours PASS
+  [ ] Package jeffreys_flow/ créé, interface Oracle/Sampler cohérente,
+      svgd.py et score_based.py mis à jour pour s'appuyer dessus
+  [ ] Choix d'architecture (RealNVP vs NSF) documenté avec chiffres à l'appui
+  [ ] Premier résultat downstream qualitatif obtenu (Blahut-Arimoto)
+  [ ] methodology_note.md et notebooks/week4_results.ipynb finalisés
+  [ ] debug_log.md contient la section "Décision J24" prête pour
+      CHECKPOINT HUMAIN
+  [ ] livrables.txt à jour
+
+Si un point bloque après plusieurs tentatives raisonnables de correction,
+ne pas s'acharner : documenter le blocage précisément dans debug_log.md
+avec ce qui a été essayé, et continuer sur les étapes suivantes qui n'en
+dépendent pas. Le jalon J24 (ETAPE 10) reste la priorité : mieux vaut
+arriver à J24 avec un flow n_t=2 solide et n_t=4/8 documentés comme
+limites connues, plutôt que de forcer un résultat n_t=8 fragile et non
+diagnostiqué.

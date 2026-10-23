@@ -1,0 +1,41 @@
+[
+    {
+        "n_t": 2,
+        "d": 4,
+        "N": 5000,
+        "n_seeds": 5,
+        "ESS_N_mean": "N/A",
+        "ESS_N_std": "N/A",
+        "MMD_mean": 0.00032050609588623046,
+        "MMD_std": 0.00018332972738502489,
+        "Energy_Distance_mean": 0.0026590824127197266,
+        "Energy_Distance_std": 0.0012742539907820833,
+        "wall_time_s": 15.81
+    },
+    {
+        "n_t": 4,
+        "d": 8,
+        "N": 5000,
+        "n_seeds": 5,
+        "ESS_N_mean": "N/A",
+        "ESS_N_std": "N/A",
+        "MMD_mean": 0.00017044544219970703,
+        "MMD_std": 4.524104207436093e-05,
+        "Energy_Distance_mean": 0.001772308349609375,
+        "Energy_Distance_std": 0.0003021256791175404,
+        "wall_time_s": 15.25
+    },
+    {
+        "n_t": 8,
+        "d": 16,
+        "N": 5000,
+        "n_seeds": 5,
+        "ESS_N_mean": "N/A",
+        "ESS_N_std": "N/A",
+        "MMD_mean": 0.00016641616821289062,
+        "MMD_std": 3.670151827539168e-05,
+        "Energy_Distance_mean": 0.0017177581787109375,
+        "Energy_Distance_std": 0.0002467993419593883,
+        "wall_time_s": 15.03
+    }
+]

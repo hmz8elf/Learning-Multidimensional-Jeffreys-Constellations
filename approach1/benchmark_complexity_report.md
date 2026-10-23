@@ -40,7 +40,7 @@ On observe qu'ignorer les couplages (`markov_order=0`) fait gagner du temps en r
 
 Voici la représentation visuelle de ces trois benchmarks :
 
-![Croissance de la complexité en fonction de d, M et du markov_order](/home/hamza/.gemini/antigravity-cli/brain/23b90007-da3b-4379-938c-aa65daf357de/step5_complexity.png)
+![Croissance de la complexité en fonction de d, M et du markov_order](step5_complexity.png)
 
 > [!IMPORTANT]
 > **Conclusion de l'étape 5**

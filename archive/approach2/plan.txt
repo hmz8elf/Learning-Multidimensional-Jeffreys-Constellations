@@ -1,0 +1,301 @@
+PLAN D'IMPLEMENTATION COMPLET — SEMAINE 3 (J11-J17)
+Projet : Learning Multidimensional Jeffreys Constellations
+Bloc 2 — Formalisation du pipeline Normalizing Flow + premier flow validé
+Répertoire de travail : ~/Documents/EMI-CS/Stage/CNRST/Approche 2/
+Stack : Python 3.12, PyTorch, numpy, scipy, matplotlib, pytest
+
+Ce document est destiné à un agent de codage autonome (Antigravity). Il doit
+TOUT exécuter : créer la structure de fichiers, écrire le code, écrire les
+tests, lancer les entraînements, produire les résultats et les livrables.
+Ne rien laisser en attente de validation humaine sauf mention explicite
+"CHECKPOINT HUMAIN" ci-dessous.
+
+===============================================================
+CONTEXTE
+===============================================================
+On construit, dans "Approche 2/", un pipeline générique d'inférence
+variationnelle par normalizing flow pour échantillonner une distribution
+cible non normalisée w_J(theta) (prior de Jeffreys tilté), connue
+uniquement via un oracle ponctuel log_w_J(theta).
+
+w_J(theta) ∝ sqrt(det J(theta)) * exp(-lambda_star * c(theta))
+log_w_J(theta) = 0.5 * logdet(J(theta)) - lambda_star * c(theta)
+
+Le pipeline (oracle -> flow -> diagnostics) doit être directement réutilisable
+pour SVGD (Semaine 5) et score-based sampling (Semaine 6, si stage 8 sem.).
+Convention de style à respecter : celle déjà utilisée dans "Approche 1/"
+(scripts plats, préfixe validate_stepN.py pour les scripts de validation,
+un livrables.txt et un plan.txt à la racine du dossier).
+
+Réutilisation d'Approche 1 : les fonctions utiles de
+"Approche 1/lambda_star.py" (résolution du multiplicateur de Lagrange) et
+"Approche 1/model.py" (calcul de J(theta) si présent) doivent être
+ADAPTEES (copiées + réécrites, pas importées directement) dans
+"Approche 2/oracle.py", avec un commentaire indiquant la provenance,
+ex: "# adapté de Approche 1/lambda_star.py".
+Avant d'écrire oracle.py, lire ces deux fichiers pour comprendre les
+fonctions et signatures déjà disponibles.
+
+===============================================================
+ETAPE 0 — CREATION DE LA STRUCTURE (à exécuter en premier)
+===============================================================
+Depuis ~/Documents/EMI-CS/Stage/CNRST/, créer/compléter "Approche 2/" avec
+l'arborescence suivante (créer les fichiers manquants avec du contenu,
+ne pas écraser plan.txt / ToDo.txt existants sans les avoir lus d'abord) :
+
+Approche 2/
+├── plan.txt                     (ce fichier, déjà présent)
+├── livrables.txt                (à créer, même format que Approche 1/livrables.txt)
+├── ToDo.txt                     (déjà présent, ne pas écraser — lire et
+│                                  éventuellement compléter en fin de semaine)
+├── oracle.py
+├── flow.py
+├── train.py
+├── diagnostics.py
+├── config.py
+├── svgd.py                      (stub uniquement, pour S5)
+├── score_based.py               (stub uniquement, pour S6)
+├── validate_invertibility.py
+├── validate_flow_1d.py
+├── validate_flow_2d.py
+├── debug_log.md
+├── methodology_note.md
+├── checkpoints/                 (dossier vide, .pt sauvegardés dedans)
+├── notebooks/
+│   └── week3_results.ipynb
+└── .gitignore
+
+Ajouter/vérifier .gitignore (racine du dossier CNRST si absent, sinon dans
+Approche 2/) avec au minimum :
+__pycache__/
+*.pyc
+checkpoints/*.pt
+.ipynb_checkpoints/
+
+===============================================================
+ETAPE 1 — config.py
+===============================================================
+Définir une dataclass FlowConfig avec :
+  dim: int
+  n_coupling_layers: int = 6
+  hidden_dim: int = 64
+  lr: float = 1e-3
+  batch_size: int = 512
+  n_iters: int = 5000
+  seed: int = 0
+  device: str = "cpu"
+
+Ajouter une fonction set_seed(seed: int) qui fixe torch, numpy et random.
+
+===============================================================
+ETAPE 2 — oracle.py
+===============================================================
+Contenu attendu :
+  1. Lire Approche 1/lambda_star.py et Approche 1/model.py (et
+     jeffreys_baseline.py si utile) pour identifier les fonctions de calcul
+     de J(theta), c(theta), et de résolution de lambda_star.
+  2. Adapter (copier + réécrire proprement, en torch plutôt qu'en numpy si
+     l'original est en numpy, pour compatibilité autodiff) :
+       - fisher_information_1d(theta) -> J(theta), cas AWGN scalaire (II-D)
+       - cost_fn(theta) -> c(theta), typiquement theta**2 ou ||theta||^2
+       - solve_lambda_star(...) -> lambda_star, réutilisant la logique de
+         Approche 1/lambda_star.py adaptée au cas traité ici
+  3. Fonction principale :
+       def log_w_J_1d(theta: Tensor[..., 1], lambda_star: float) -> Tensor[...]
+       def log_w_J_2d(theta: Tensor[..., 2], lambda_star: float) -> Tensor[...]
+     (cas 2D : produit indépendant de deux cas 1D, ou réduction MIMO n_t=2
+     simple si directement dérivable sans complexité excessive — sinon
+     rester sur un produit de deux 1D pour cette semaine)
+  4. Fonction de référence pour validation :
+       def theoretical_jeffreys_pdf_1d(theta, lambda_star) -> Tensor
+     obtenue par normalisation numérique de exp(log_w_J_1d) via
+     scipy.integrate.quad sur le domaine considéré.
+  5. Docstring de module en tête de fichier documentant clairement :
+     entrée = theta (Tensor), sortie = log-densité non normalisée (scalar
+     ou batch), aucune dépendance à une constante de normalisation.
+
+===============================================================
+ETAPE 3 — validate_oracle.py (test unitaire de l'oracle)
+===============================================================
+  - Comparer exp(log_w_J_1d) normalisé numériquement à
+    theoretical_jeffreys_pdf_1d sur une grille, erreur relative < 1e-2
+  - Vérifier absence de NaN/Inf sur un range de theta raisonnable
+  - Sauver un plot oracle vs théorique (oracle_vs_theoretical_1d.png)
+  - Print PASS/FAIL clair à la fin du script
+
+Exécuter ce script et corriger jusqu'à obtenir PASS avant de continuer.
+
+===============================================================
+ETAPE 4 — flow.py
+===============================================================
+Implémenter dans flow.py :
+  class CouplingLayer(nn.Module):
+    - split theta en (theta_A, theta_B) selon un masque binaire fixe
+    - MLP s(theta_A), MLP t(theta_A) (2-3 couches, hidden_dim de config)
+    - forward(theta) -> theta_out, log_det   (theta -> version transformée,
+      utilisé pour log_prob / inverse selon convention choisie)
+    - inverse(theta) -> theta_out, log_det   (sens opposé)
+    - alterner le masque A/B entre couches successives (paramètre layer_idx)
+
+  class RealNVPFlow(nn.Module):
+    - empile n_coupling_layers CouplingLayer
+    - base distribution N(0, I_dim)
+    - sample(n: int) -> theta: Tensor[n, dim]   (z~N(0,I) -> forward)
+    - log_prob(theta: Tensor[n, dim]) -> Tensor[n]  (inverse -> log q0(z) - log|det|)
+
+Docstring de module précisant l'interface générique (entrée/sortie stables
+pour réutilisation SVGD/score-based).
+
+===============================================================
+ETAPE 5 — validate_invertibility.py
+===============================================================
+  - Instancier un RealNVPFlow non entraîné (poids aléatoires)
+  - Tirer un batch z, vérifier ||inverse(forward(z)) - z|| < 1e-5
+  - Vérifier que log_prob(sample(n)) ne contient pas de NaN
+  - Print PASS/FAIL
+
+Exécuter et corriger jusqu'à PASS avant de continuer.
+
+===============================================================
+ETAPE 6 — train.py
+===============================================================
+  def train(flow: RealNVPFlow, log_w_J: Callable, config: FlowConfig)
+      -> tuple[RealNVPFlow, dict]:
+    - boucle for i in range(config.n_iters):
+        theta = flow.sample(config.batch_size)   (différentiable via reparam trick)
+        loss = (flow.log_prob(theta) - log_w_J(theta)).mean()
+        backward + optimizer.step() (Adam, lr=config.lr)
+        logger loss toutes les 100 itérations dans un dict history {"loss": [...]}
+    - à la fin : sauver checkpoints/flow_<tag>.pt (state_dict) et
+      checkpoints/history_<tag>.json
+    - retourner (flow entraîné, history)
+
+Ajouter un bloc `if __name__ == "__main__":` qui lance un entraînement
+complet sur le cas 1D de oracle.py avec tag="1d", et affiche la loss finale.
+
+Exécuter ce script. Vérifier que la loss décroît de façon monotone globale
+(quelques oscillations normales, mais tendance claire à la baisse).
+
+===============================================================
+ETAPE 7 — diagnostics.py
+===============================================================
+  def compute_ess(theta, log_w_J_values, log_q_values) -> float:
+    - log_weights = log_w_J_values - log_q_values
+    - normaliser (softmax numériquement stable)
+    - ESS = 1 / sum(w_normalized**2)
+    - retourner ESS (et ESS/N en complément)
+
+  def compare_to_theoretical_1d(samples, theoretical_pdf_fn, save_path):
+    - histogramme des samples + courbe theoretical_pdf_fn superposée
+    - sauver en PNG
+    - retourner aussi le résultat d'un test KS (scipy.stats.kstest) si une
+      CDF théorique est disponible/calculable
+
+  def compare_2d(samples, theoretical_pdf_fn_or_None, save_path):
+    - scatter plot 2D des samples, contours théoriques si disponibles
+
+===============================================================
+ETAPE 8 — validate_flow_1d.py
+===============================================================
+  - Charger le flow entraîné (checkpoints/flow_1d.pt)
+  - Calculer ESS sur un batch de samples
+  - Appeler compare_to_theoretical_1d, sauver le plot
+  - Print résumé numérique (ESS/N, p-value KS le cas échéant)
+  - CHECKPOINT HUMAIN : si ESS/N < 0.3, documenter dans debug_log.md avant
+    de continuer (ne pas bloquer, mais consigner le problème)
+
+===============================================================
+ETAPE 9 — cas 2D (oracle 2D + entraînement + validation)
+===============================================================
+  - Relancer train.py avec dim=2 et log_w_J_2d, tag="2d"
+  - Surveiller NaN dans log_det, effondrement de l'ESS (mode collapse)
+  - Si instabilité : essayer gradient clipping (torch.nn.utils.clip_grad_norm_),
+    réduire lr, augmenter n_coupling_layers ou hidden_dim — documenter
+    chaque essai dans debug_log.md (problème -> fix testé -> résultat)
+  - Créer validate_flow_2d.py sur le même modèle que validate_flow_1d.py,
+    utilisant compare_2d
+
+===============================================================
+ETAPE 10 — svgd.py et score_based.py (stubs)
+===============================================================
+Créer uniquement les signatures avec docstring et `raise NotImplementedError`,
+respectant la même interface que RealNVPFlow là où c'est applicable :
+
+  svgd.py:
+    def svgd_sample(log_w_J: Callable, n_particles: int, n_steps: int,
+                     dim: int, ...) -> Tensor[n_particles, dim]:
+        """Stub — implémenté en Semaine 5."""
+        raise NotImplementedError
+
+  score_based.py:
+    def score_based_sample(log_w_J: Callable, n_samples: int, dim: int,
+                            ...) -> Tensor[n_samples, dim]:
+        """Stub — implémenté en Semaine 6 (variante 8 semaines uniquement)."""
+        raise NotImplementedError
+
+Le simple fait d'écrire ces signatures doit être cohérent avec oracle.py
+et diagnostics.py déjà écrits (mêmes types d'entrée/sortie) — si une
+incohérence apparaît, l'agent doit ajuster oracle.py/diagnostics.py pour
+rester générique, pas créer une interface spécifique au flow.
+
+===============================================================
+ETAPE 11 — methodology_note.md
+===============================================================
+Rédiger (en français, dense, style académique) avec les sections suivantes,
+en réutilisant le contenu déjà discuté et en complétant avec les résultats
+obtenus dans ce plan :
+  1. D'où vient l'oracle (chaîne modèle physique -> J(theta) -> lambda* -> log_w_J)
+  2. Interface générique du système (entrées/sorties, schéma texte)
+  3. Construction du flow (changement de variable, coupling layers)
+  4. Objectif variationnel (reverse KL, pourquoi Z disparaît)
+  5. Validation : méthode + résultats concrets (ESS, KS test, plots
+     référencés) obtenus aux étapes 8 et 9
+  6. Limites et points ouverts pour Semaine 4 (scalabilité en dimension,
+     choix RealNVP vs Neural Spline Flow)
+
+===============================================================
+ETAPE 12 — notebooks/week3_results.ipynb
+===============================================================
+Notebook d'orchestration uniquement (pas de logique métier dedans, tout
+importé depuis les modules .py) :
+  - Section 1D : charger flow_1d.pt, afficher courbe de loss, histogramme
+    vs théorique, ESS
+  - Section 2D : idem pour flow_2d.pt, scatter plot
+  - Tableau récapitulatif des hyperparamètres utilisés et de leur impact
+    observé (texte markdown dans le notebook, basé sur debug_log.md)
+
+===============================================================
+ETAPE 13 — livrables.txt
+===============================================================
+Suivre le même format que Approche 1/livrables.txt. Lister :
+  - methodology_note.md
+  - oracle.py + validate_oracle.py (PASS)
+  - flow.py + validate_invertibility.py (PASS)
+  - train.py + checkpoints/flow_1d.pt, flow_2d.pt
+  - diagnostics.py
+  - validate_flow_1d.py, validate_flow_2d.py + résultats (ESS, plots)
+  - debug_log.md
+  - notebooks/week3_results.ipynb
+  - svgd.py, score_based.py (stubs prêts pour S5/S6)
+
+===============================================================
+CRITERES DE VALIDATION GLOBAUX (fin de semaine)
+===============================================================
+  [ ] Tous les validate_*.py s'exécutent et affichent PASS (ou limites
+      documentées explicitement dans debug_log.md si non atteint)
+  [ ] flow.sample(n) et flow.log_prob(theta) fonctionnent en batch, sans NaN
+  [ ] ESS/N documenté pour 1D et 2D (même si sous le seuil idéal — alors
+      documenter pourquoi dans debug_log.md)
+  [ ] Comparaison visuelle 1D flow vs théorique produite et sauvegardée
+  [ ] Cas 2D entraîné, résultats consignés même si perfectible
+  [ ] Interface (oracle / flow / train / diagnostics) stable, cohérente
+      avec les stubs svgd.py et score_based.py
+  [ ] methodology_note.md et notebooks/week3_results.ipynb finalisés
+  [ ] livrables.txt à jour
+  [ ] Rien à la racine de Approche 2/ ne casse la convention déjà en place
+      dans Approche 1/ (mêmes types de fichiers, pas de structure exotique)
+
+Si un point bloque après plusieurs tentatives raisonnables de correction,
+ne pas s'acharner : documenter le blocage précisément dans debug_log.md
+avec ce qui a été essayé, et continuer sur les étapes suivantes qui n'en
+dépendent pas.

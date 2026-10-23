@@ -1,0 +1,35 @@
+[
+    {
+        "n_t": 2,
+        "d": 4,
+        "Accept_Rate_mean": 0.9649600000000002,
+        "Accept_Rate_std": 0.002309632005320332,
+        "Rhat_max_mean": 1.0001019477844237,
+        "MMD_mean": 0.00021779537200927734,
+        "MMD_std": 0.00011967204398630708,
+        "Energy_Distance_mean": 0.0019283771514892578,
+        "Energy_Distance_std": 0.0008255151689620151
+    },
+    {
+        "n_t": 4,
+        "d": 8,
+        "Accept_Rate_mean": 0.94512,
+        "Accept_Rate_std": 0.003901999487442321,
+        "Rhat_max_mean": 1.0004199981689452,
+        "MMD_mean": 0.00022156238555908202,
+        "MMD_std": 8.664062276134908e-05,
+        "Energy_Distance_mean": 0.002174663543701172,
+        "Energy_Distance_std": 0.0005909767151986964
+    },
+    {
+        "n_t": 8,
+        "d": 16,
+        "Accept_Rate_mean": 0.95076,
+        "Accept_Rate_std": 0.0012419339757007732,
+        "Rhat_max_mean": 1.000835371017456,
+        "MMD_mean": 0.00016825199127197267,
+        "MMD_std": 4.334949395368776e-05,
+        "Energy_Distance_mean": 0.0017554283142089844,
+        "Energy_Distance_std": 0.0003024796658875704
+    }
+]
