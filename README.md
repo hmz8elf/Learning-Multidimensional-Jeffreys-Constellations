@@ -201,9 +201,7 @@ archive/          one-off scripts kept for traceability (report patches, pilots,
 
 ## Acknowledgments
 
-TODO: supervisor acknowledgment.
-
-Part of the code and of this documentation was written with the help of AI assistants. All experiments were run, checked and interpreted by the author.
+I thank Mr. Redouane MERROUCH, Professor at Mohammadia School of Engineering (EMI), the Head of MARWAN service at CNRST (Rabat, Morocco), for supervising this internship (summer 2026). This work builds on the paper by Yang & Combes (arXiv:2504.13325).
 
 ## License
 
