@@ -147,7 +147,7 @@ def run(A=10.0, sigma2=0.1, nt=2, M_points=6, p=6, n_quad_marg=8, n_quad_fit=40)
 
 if __name__ == "__main__":
     for sigma2 in [0.5, 0.1]:
-        run(A=10.0, sigma2=sigma2, nt=2, M_points=6, p=6, n_quad_marg=20)
+        run(A=10.0, sigma2=sigma2, nt=2, M_points=6, p=6, n_quad_marg=10)
 
     print("=" * 70)
     print("CONSTAT (cf. discussion) : lambda* est correct à ~2-3% près, mais")

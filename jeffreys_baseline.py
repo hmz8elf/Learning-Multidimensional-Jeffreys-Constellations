@@ -115,6 +115,9 @@ class BaselineConfig:
     bisection_cdf_tol: float = 1e-12
     bisection_cdf_max_iter: int = 100
 
+    # Domaine (hypercube ou ball)
+    domain: str = "hypercube"
+
     # Réduction markovienne optionnelle (Proposition 6.2) : si fixé à
     # D, seules les D dernières coordonnées du préfixe sont utilisées
     # comme contexte, avec mise en cache -> coût O(d * M^D) au lieu de
@@ -180,6 +183,9 @@ class JeffreysConstellationBuilder:
         stabilité numérique — cf. "4.1 : ... en espace logarithmique"
         dans le document).
         """
+        if self.cfg.domain == "ball" and np.sum(theta**2) > self.cfg.A**2:
+            return -1e6
+
         Jm = np.asarray(self.J(theta), dtype=float)
         sign, logdet = np.linalg.slogdet(Jm)
         if sign <= 0:
