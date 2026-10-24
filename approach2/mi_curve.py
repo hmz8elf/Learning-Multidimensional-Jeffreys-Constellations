@@ -448,11 +448,10 @@ def compute_gap_analysis(all_results: dict) -> dict:
 def plot_mi_curves(all_results: dict):
     colors_flow = {"nt2": "#1f77b4", "nt4": "#2ca02c", "nt8": "#d62728"}
     colors_pam  = {"nt2": "#aec7e8", "nt4": "#98df8a", "nt8": "#ff9896"}
-    color_j1d   = "#ff7f0e"
 
     M_vals = all_results[list(all_results.keys())[0]]["M_values"]
 
-    # ── Figure 1 : toutes dimensions sur un seul graphe ──────────
+    # ── Figure 1: all dimensions on one plot ─────────────────────
     fig, ax = plt.subplots(figsize=(10, 6))
 
     for key in ["nt2", "nt4", "nt8"]:
@@ -470,24 +469,15 @@ def plot_mi_curves(all_results: dict):
                     color=colors_flow[key],
                     label=f"Flow nt={nt_val} (d={d_val})", capsize=4, linewidth=1.5)
         ax.plot(M_vals, mi_pam, marker='s', linestyle='--',
-                color=colors_pam[key], label=f"PAM-Cart nt={nt_val}", linewidth=1.2)
-
-        # Jeffreys 1D (nt=2 seulement)
-        if key == "nt2" and "jeffreys_1d" in res:
-            mi_j1d = [res["jeffreys_1d"][str(M)].get("mean") for M in M_vals]
-            valid  = [(m, v) for m, v in zip(M_vals, mi_j1d) if v is not None]
-            if valid:
-                mv, vv = zip(*valid)
-                ax.plot(mv, vv, marker='^', linestyle=':', color=color_j1d,
-                        label="Jeffreys 1D Cart nt=2", linewidth=1.2)
+                color=colors_pam[key], label=f"PAM (Cartesian) nt={nt_val}", linewidth=1.2)
 
     ax.set_xscale('log', base=2)
     ax.set_xticks(M_vals)
     ax.set_xticklabels([str(m) for m in M_vals])
-    ax.set_xlabel("Taille de la constellation M")
-    ax.set_ylabel("Information Mutuelle (bits/usage)")
-    ax.set_title(f"MI vs M : RealNVP Flow vs Baselines\n"
-                 f"(Canal AWGN, σ²={SIGMA2}, {N_SEEDS} graines, BA max_iter={BA_MAX_ITER})")
+    ax.set_xlabel("Constellation size M")
+    ax.set_ylabel("Mutual information (bits/channel use)")
+    ax.set_title(f"MI vs M: RealNVP flow vs PAM\n"
+                 f"(AWGN channel, σ²={SIGMA2}, {N_SEEDS} seeds, BA max_iter={BA_MAX_ITER})")
     ax.legend(loc="upper left", fontsize=8)
     ax.grid(True, which="both", linestyle="--", alpha=0.5)
     fig.tight_layout()
@@ -495,7 +485,7 @@ def plot_mi_curves(all_results: dict):
     plt.close(fig)
     print("Saved mi_curve_all.png")
 
-    # ── Figure 2 : une sous-figure par nt ────────────────────────
+    # ── Figure 2: one subplot per nt ─────────────────────────────
     fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=False)
 
     for ax, key in zip(axes, ["nt2", "nt4", "nt8"]):
@@ -514,16 +504,7 @@ def plot_mi_curves(all_results: dict):
         ax.errorbar(M_vals, mi_mean, yerr=mi_std, marker='o', linestyle='-',
                     color='steelblue', label='RealNVP Flow', capsize=4, linewidth=1.5)
         ax.plot(M_vals, mi_pam, marker='s', linestyle='--',
-                color='tomato', label='PAM-Cart', linewidth=1.2)
-
-        # Jeffreys 1D (nt=2 seulement)
-        if key == "nt2" and "jeffreys_1d" in res:
-            mi_j1d = [res["jeffreys_1d"][str(M)].get("mean") for M in M_vals]
-            valid  = [(m, v) for m, v in zip(M_vals, mi_j1d) if v is not None]
-            if valid:
-                mv, vv = zip(*valid)
-                ax.plot(mv, vv, marker='^', linestyle=':', color=color_j1d,
-                        label="Jeffreys 1D Cart", linewidth=1.2)
+                color='tomato', label='PAM (Cartesian)', linewidth=1.2)
 
         ax2 = ax.twinx()
         ax2.plot(M_vals, gap, marker='^', linestyle=':', color='gray',
@@ -536,7 +517,7 @@ def plot_mi_curves(all_results: dict):
         ax.set_xticks(M_vals)
         ax.set_xticklabels([str(m) for m in M_vals], rotation=45, fontsize=8)
         ax.set_xlabel("M")
-        ax.set_ylabel("MI (bits/usage)")
+        ax.set_ylabel("MI (bits/channel use)")
         ax.set_title(f"MI vs M  (nt={nt_val}, d={d_val})")
 
         lines1, labs1 = ax.get_legend_handles_labels()
@@ -544,7 +525,7 @@ def plot_mi_curves(all_results: dict):
         ax.legend(lines1 + lines2, labs1 + labs2, fontsize=7, loc="upper left")
         ax.grid(True, which="both", linestyle="--", alpha=0.4)
 
-    fig.suptitle(f"MI vs M par dimension — Canal AWGN (σ²={SIGMA2})", fontsize=12)
+    fig.suptitle(f"MI vs M per dimension — AWGN channel (σ²={SIGMA2})", fontsize=12)
     fig.tight_layout()
     fig.savefig("mi_curve_per_nt.png", dpi=300)
     plt.close(fig)

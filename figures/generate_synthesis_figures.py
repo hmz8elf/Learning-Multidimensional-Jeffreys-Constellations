@@ -1,67 +1,65 @@
+"""Synthesis figures, generated only from the committed JSON result files.
+
+Run from the repository root:
+    python figures/generate_synthesis_figures.py
+
+Outputs:
+    figures/synth_energy_distance_vs_d.png   energy distance vs dimension
+    figures/synth_mi_vs_M_nt{2,4,8}.png      mutual information vs M, one figure per n_t
+    figures/synth_complexity.png             flow log-det time vs dimension
+"""
 import os
 import json
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.optimize import curve_fit
 
-def power_law(x, a, b):
-    return a * np.power(x, b)
-
-# Harmonized styling
-COLORS = {
-    'Flow': '#1f77b4',       # blue
-    'SVGD': '#ff7f0e',       # orange
-    'Score-based': '#2ca02c', # green
-    'MCMC amorti': '#d62728', # red
-    'PAM': '#7f7f7f',        # grey
-    'Jeffreys 1D': '#9467bd' # purple
+# Harmonized styling. Each method also gets its own marker and line style,
+# so the curves stay distinguishable without color (colorblind / print).
+STYLES = {
+    'Flow':           dict(color='#1f77b4', marker='o', linestyle='-'),
+    'SVGD':           dict(color='#ff7f0e', marker='s', linestyle='--'),
+    'Score-based':    dict(color='#2ca02c', marker='^', linestyle='-.'),
+    'Amortized MCMC': dict(color='#d62728', marker='D', linestyle=':'),
+    'PAM':            dict(color='#7f7f7f', marker='x', linestyle='-'),
 }
-plt.rcParams.update({'font.size': 12, 'axes.labelsize': 14, 'legend.fontsize': 12, 'xtick.labelsize': 11, 'ytick.labelsize': 11})
+plt.rcParams.update({'font.size': 12, 'axes.labelsize': 14, 'legend.fontsize': 11,
+                     'xtick.labelsize': 11, 'ytick.labelsize': 11})
 
 os.makedirs('figures', exist_ok=True)
 
+
+def load(path):
+    with open(path, 'r') as f:
+        return json.load(f)
+
+
 # ---------------------------------------------------------
-# Figure 1: Energy Distance vs Dimension d
+# Figure 1: Energy distance vs dimension d
 # ---------------------------------------------------------
 try:
-    with open('approach2/evaluation_metrics.json', 'r') as f:
-        flow_data = json.load(f)
-    with open('approach2/svgd_metrics.json', 'r') as f:
-        svgd_data = json.load(f)
-    with open('approach2/score_metrics.json', 'r') as f:
-        score_data = json.load(f)
-    with open('approach2/amortized_metrics.json', 'r') as f:
-        mcmc_data = json.load(f)
+    sources = {
+        'Flow': 'approach2/evaluation_metrics.json',
+        'SVGD': 'approach2/svgd_metrics.json',
+        'Score-based': 'approach2/score_metrics.json',
+        'Amortized MCMC': 'approach2/amortized_metrics.json',
+    }
 
     fig, ax = plt.subplots(figsize=(8, 6))
 
-    def plot_method(data, name, label):
-        d_vals = []
-        ed_vals = []
-        for item in data:
-            if 'd' in item and 'Energy_Distance_mean' in item:
-                d_vals.append(item['d'])
-                ed_vals.append(item['Energy_Distance_mean'])
-        
-        # Sort by d
-        sorted_indices = np.argsort(d_vals)
-        d_vals = np.array(d_vals)[sorted_indices]
-        ed_vals = np.array(ed_vals)[sorted_indices]
-        
-        ax.plot(d_vals, ed_vals, marker='o', linewidth=2, color=COLORS[name], label=label)
-
-    plot_method(flow_data, 'Flow', 'Normalizing Flow')
-    plot_method(svgd_data, 'SVGD', 'SVGD')
-    plot_method(score_data, 'Score-based', 'Score-based Generative Model')
-    plot_method(mcmc_data, 'MCMC amorti', 'MCMC Amorti')
+    for name, path in sources.items():
+        rows = [r for r in load(path) if 'd' in r and 'Energy_Distance_mean' in r]
+        rows.sort(key=lambda r: r['d'])
+        d_vals = [r['d'] for r in rows]
+        ed_vals = [r['Energy_Distance_mean'] for r in rows]
+        ax.plot(d_vals, ed_vals, linewidth=2, markersize=8, label=name, **STYLES[name])
 
     ax.set_xlabel('Dimension $d = 2 n_t$')
-    ax.set_ylabel('Energy Distance (moyenne)')
+    ax.set_ylabel('Energy distance to HMC reference (mean of 5 seeds)')
     ax.set_yscale('log')
     ax.set_xticks([4, 8, 16])
     ax.grid(True, which="both", ls="--", alpha=0.5)
     ax.legend()
-    ax.set_title('Distance de l\'Énergie entre les échantillons et la cible analytique vs Dimension')
+    ax.set_title('Sample quality vs dimension (lower is better)')
     plt.tight_layout()
     plt.savefig('figures/synth_energy_distance_vs_d.png', dpi=300)
     plt.close()
@@ -70,117 +68,101 @@ except Exception as e:
     print(f"Error Fig 1: {e}")
 
 # ---------------------------------------------------------
-# Figure 2: MI(M) curves for nt=2
+# Figure 2: MI(M) curves, one figure per n_t
+# The "jeffreys_1d" entry of the JSON is not plotted: it uses M_1d^d points
+# instead of M, so it is not comparable (README, limitation B3).
 # ---------------------------------------------------------
 try:
-    with open('approach2/mi_curve_results.json', 'r') as f:
-        mi_data = json.load(f)
-    
-    nt_key = 'nt2'
-    if nt_key in mi_data:
+    mi_data = load('approach2/mi_curve_results.json')
+
+    methods = {
+        'flow': 'Flow',
+        'svgd': 'SVGD',
+        'score': 'Score-based',
+        'amortized': 'Amortized MCMC',
+        'pam': 'PAM',
+    }
+
+    for nt in (2, 4, 8):
+        nt_key = f'nt{nt}'
+        if nt_key not in mi_data:
+            print(f"Key {nt_key} not in mi_data")
+            continue
         data = mi_data[nt_key]
         M_vals = data['M_values']
-        
+
         fig, ax = plt.subplots(figsize=(8, 6))
-        
-        methods = {
-            'flow': ('Flow', 'Normalizing Flow'),
-            'svgd': ('SVGD', 'SVGD'),
-            'score': ('Score-based', 'Score-based'),
-            'amortized': ('MCMC amorti', 'MCMC Amorti'),
-            'pam': ('PAM', 'PAM (Cartésien)'),
-            'jeffreys_1d': ('Jeffreys 1D', 'Jeffreys 1D (Baseline)')
-        }
-        
-        for key, (color_key, label) in methods.items():
-            if key in data:
-                means = []
-                m_plot = []
-                for m_str in map(str, M_vals):
-                    if m_str in data[key]:
-                        means.append(data[key][m_str]['mean'])
-                        m_plot.append(int(m_str))
-                if means:
-                    ax.plot(m_plot, means, marker='o', linewidth=2, color=COLORS[color_key], label=label)
 
-        # Plot log2(M) bound
-        x_bound = np.linspace(min(M_vals), max(M_vals), 100)
-        ax.plot(x_bound, np.log2(x_bound), 'k--', alpha=0.6, label='Borne log2(M)')
+        for key, name in methods.items():
+            if key not in data:
+                continue
+            m_plot = [M for M in M_vals if str(M) in data[key]]
+            means = [data[key][str(M)]['mean'] for M in m_plot]
+            if means:
+                label = 'PAM (Cartesian grid)' if key == 'pam' else name
+                ax.plot(m_plot, means, linewidth=2, markersize=7, label=label, **STYLES[name])
 
-        ax.set_xlabel('Taille de la constellation $M$')
-        ax.set_ylabel('Information Mutuelle $I(X; Y)$ [bits]')
+        ax.plot(M_vals, np.log2(M_vals), 'k--', alpha=0.6, linewidth=1.2,
+                label='Upper bound $\\log_2 M$')
+
+        ax.set_xlabel('Constellation size $M$')
+        ax.set_ylabel('Mutual information $I(X;Y)$ [bits]')
         ax.set_xscale('log', base=2)
         ax.set_xticks(M_vals)
         ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
         ax.grid(True, ls="--", alpha=0.5)
-        ax.legend()
-        ax.set_title(f'Comparaison de l\'Information Mutuelle vs $M$ (nt=2, d=4)')
+        ax.legend(loc='upper left')
+        ax.set_title(f'Mutual information vs $M$ ($n_t = {nt}$, $d = {2 * nt}$)')
         plt.tight_layout()
-        plt.savefig('figures/synth_mi_vs_M_nt2.png', dpi=300)
+        plt.savefig(f'figures/synth_mi_vs_M_nt{nt}.png', dpi=300)
         plt.close()
-        print("Fig 2 generated")
-    else:
-        print(f"Key {nt_key} not in mi_data")
+        print(f"Fig 2 (nt={nt}) generated")
 except Exception as e:
     print(f"Error Fig 2: {e}")
 
 # ---------------------------------------------------------
-# Figure 3: Complexity Summary
+# Figure 3: Flow log-det complexity
+# Fixed architecture (L=8, h=64) and trained models (L grows with d) are
+# plotted as separate series; the fit is the "fit_synth" entry of the JSON.
 # ---------------------------------------------------------
 try:
-    with open('approach2/benchmark_logdet_complexity.json', 'r') as f:
-        comp_data = json.load(f)
+    comp_data = load('approach2/benchmark_logdet_complexity.json')
 
-    d_vals = []
-    t_vals = []
-    
-    for key, val in comp_data.items():
-        if key.startswith('synth_d') or key.startswith('trained_d'):
-            d = int(key.split('_d')[1])
-            d_vals.append(d)
-            t_vals.append(val['mean'] * 1000) # Convert to ms
-            
-    # Sort
-    d_vals = np.array(d_vals)
-    t_vals = np.array(t_vals)
-    sorted_idx = np.argsort(d_vals)
-    d_vals = d_vals[sorted_idx]
-    t_vals = t_vals[sorted_idx]
-    
-    # Keep only unique d for fit to avoid bias if both synth and trained are present for same d
-    # actually let's just plot all points
-    
+    def series(prefix):
+        pts = sorted((int(k.split('_d')[1]), v['mean'] * 1000, v['L'])
+                     for k, v in comp_data.items() if k.startswith(prefix))
+        return zip(*pts)
+
     fig, ax = plt.subplots(figsize=(8, 6))
-    
-    # Plot data points
-    ax.scatter(d_vals, t_vals, color='black', label='Mesures (log-det jacobien)', zorder=5)
-    
-    # Fit power law
-    try:
-        popt, _ = curve_fit(power_law, d_vals, t_vals, p0=[0.1, 3])
-        x_fit = np.linspace(min(d_vals), max(d_vals), 100)
-        y_fit = power_law(x_fit, *popt)
-        ax.plot(x_fit, y_fit, 'r--', label=f'Ajustement: $T \propto d^{{{popt[1]:.2f}}}$')
-    except Exception as e:
-        print(f"Fit error: {e}")
+
+    d_s, t_s, _ = series('synth_d')
+    ax.plot(d_s, t_s, color='black', marker='o', linestyle='-', linewidth=1.5,
+            label='Fixed architecture (L = 8, h = 64)', zorder=5)
+
+    d_t, t_t, L_t = series('trained_d')
+    ax.plot(d_t, t_t, color='#1f77b4', marker='s', linestyle='--', linewidth=1.5,
+            markersize=8, label='Trained flows (L = 8 / 10 / 12)', zorder=6)
+    for d, t, L in zip(d_t, t_t, L_t):
+        ax.annotate(f'L={L}', (d, t), textcoords='offset points', xytext=(6, 4), fontsize=10)
+
+    fit = comp_data['fit_synth']
+    b = round(fit['b'], 2) + 0.0  # avoid printing "-0.00"
+    x_fit = np.array([min(d_s), max(d_s)], dtype=float)
+    ax.plot(x_fit, np.exp(fit['log_a']) * x_fit ** fit['b'] * 1000, 'r:', linewidth=1.5,
+            label=f'Power-law fit, fixed arch.: $T \\propto d^{{{b:.2f}}}$')
 
     ax.set_xlabel('Dimension $d$')
-    ax.set_ylabel('Temps d\'exécution par batch [ms]')
+    ax.set_ylabel('Time per batch of 1000 [ms]')
     ax.set_xscale('log', base=2)
     ax.set_yscale('log')
-    ax.set_xticks([2, 4, 8, 16, 32, 64, 128])
+    ax.set_xticks([2, 4, 8, 16, 32, 64])
     ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
+    ax.set_yticks([2.0, 2.5, 3.0])
+    ax.get_yaxis().set_major_formatter(plt.ScalarFormatter())
+    ax.get_yaxis().set_minor_formatter(plt.NullFormatter())
     ax.grid(True, which="both", ls="--", alpha=0.5)
-    ax.legend()
-    ax.set_title('Complexité Temporelle du Calcul du Log-Déterminant')
-    
-    # Add clarification L vs d as text
-    # Usually L scales with d in trained models (e.g., L ~ d or L ~ d/2)
-    textstr = "Note : Le nombre de couches $L$\ncroît généralement avec $d$ dans\nles modèles Flow entraînés."
-    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10,
-            verticalalignment='top', bbox=props)
-
+    ax.legend(loc='upper left')
+    ax.set_title('Flow log-determinant time vs dimension (GPU)')
     plt.tight_layout()
     plt.savefig('figures/synth_complexity.png', dpi=300)
     plt.close()
