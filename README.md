@@ -70,7 +70,13 @@ These were found while cleaning the code for publication. They are **not fixed**
 - **B2: radial density factor.** `radial_unnorm_density` (`approach2/oracle_mimo.py`, `approach1/validate_step4.py`) uses $2\sigma^4/(1-\sigma^2)$ in the $\det J$ correction term. The coded $J(\theta)$ implies $4\sigma^4/(1-\sigma^2)$. This has a small effect on λ* and still needs checking against the paper.
 - **B3: "Jeffreys 1D" MI baseline.** In `mi_curve.py`, this baseline uses $M_{1d}^d$ points instead of $M$. For example, M = 4 gives 16 points and hence 4 bits > log₂4. Its values in `mi_curve_results.json` cannot be compared with the other columns, so it is not plotted. In the same file, the PAM grid has fewer than M points for $n_t = 2$ at M = 32 (16 points) and M = 128 (81 points).
 - **B4: permutation-test noise baseline.** The "HMC vs HMC" baseline compares two halves of 2500 samples, while the observed statistic uses 5000 vs 5000. Because the MMD² estimator is biased (V-statistic), the baseline is inflated. "Observed < baseline" at $n_t = 8$ is therefore not a like-for-like comparison.
-- **B5: $n_t = 4$ anomaly check.** `nt4_anomaly_check.py` adds zero-mean random noise of 1–2 % std, whereas `power_analysis.py` applies a deterministic shift. The two experiments measure different perturbations.
+- **B5: $n_t = 4$ anomaly check.** `nt4_anomaly_check.py` adds zero-mean random noise of 1–2 % std, whereas `power_analysis.py` applies a deterministic shift. The two experiments measure different perturbations
+
+## Known issues
+
+- **λ\* solver/density mismatch (B1).** In `oracle_mimo.py`, the λ\* solver uses `exp(-λ·ln2·r²)` (line 53) while the density uses `exp(-λ·r²)` (line 45). As a result, E‖θ‖² ≈ 8.6 instead of the power constraint P = 11.11.
+  - Sampler-vs-sampler comparisons (MMD²) remain valid, since all samplers target the same density.
+  - The mutual-information comparison against PAM is biased and should not be interpreted until this is fixed.
 
 ## Installation and tests
 
